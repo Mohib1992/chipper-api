@@ -29,7 +29,8 @@ class FavoriteTest extends TestCase
             ->assertCreated();
 
         $this->assertDatabaseHas('favorites', [
-            'post_id' => $post->id,
+            'favoritable_id' => $post->id,
+            'favoritable_type' => get_class($post),
             'user_id' => $user->id,
         ]);
     }
@@ -44,7 +45,8 @@ class FavoriteTest extends TestCase
             ->assertCreated();
 
         $this->assertDatabaseHas('favorites', [
-            'post_id' => $post->id,
+            'favoritable_id' => $post->id,
+            'favoritable_type' => get_class($post),
             'user_id' => $user->id,
         ]);
 
@@ -53,7 +55,8 @@ class FavoriteTest extends TestCase
             ->assertNoContent();
 
         $this->assertDatabaseMissing('favorites', [
-            'post_id' => $post->id,
+            'favoritable_id' => $post->id,
+            'favoritable_type' => get_class($post),
             'user_id' => $user->id,
         ]);
     }
@@ -67,4 +70,74 @@ class FavoriteTest extends TestCase
             ->deleteJson(route('favorites.destroy', ['post' => $post]))
             ->assertNotFound();
     }
+
+    public function test_a_user_can_favorite_a_user()
+    {
+        $follower = User::factory()->create();
+        $followed = User::factory()->create();
+
+        $this->actingAs($follower)
+            ->postJson(route('favorites.storeUser', ['user' => $followed]))
+            ->assertCreated();
+
+        $this->assertDatabaseHas('favorites', [
+            'favoritable_id' => $followed->id,
+            'favoritable_type' => get_class($followed),
+            'user_id' => $follower->id,
+        ]);
+    }
+
+    public function test_a_user_can_remove_a_user_from_his_favorites()
+    {
+        $follower = User::factory()->create();
+        $followed = User::factory()->create();
+
+        $this->actingAs($follower)
+            ->postJson(route('favorites.storeUser', ['user' => $followed]))
+            ->assertCreated();
+
+        $this->assertDatabaseHas('favorites', [
+            'favoritable_id' => $followed->id,
+            'favoritable_type' => get_class($followed),
+            'user_id' => $follower->id,
+        ]);
+
+        $this->actingAs($follower)
+            ->deleteJson(route('favorites.destroyUser', ['user' => $followed]))
+            ->assertNoContent();
+
+        $this->assertDatabaseMissing('favorites', [
+            'favoritable_id' => $followed->id,
+            'favoritable_type' => get_class($followed),
+            'user_id' => $follower->id,
+        ]);
+    }
+
+    public function test_a_user_can_not_remove_a_non_favorited_user()
+    {
+        $follower = User::factory()->create();
+        $followed = User::factory()->create();
+
+        $this->actingAs($follower)
+            ->deleteJson(route('favorites.destroyUser', ['user' => $followed]))
+            ->assertNotFound();
+    }
+
+    public function test_a_user_can_not_favorite_a_non_existing_user()
+    {
+        $follower = User::factory()->create();
+
+        $this->actingAs($follower)
+            ->postJson(route('favorites.storeUser', ['user' => 1000000]))
+            ->assertNotFound();
+    }
+
+    public function test_a_user_can_not_favorite_itself()
+    {
+        $follower = User::factory()->create();
+
+        $this->actingAs($follower)
+            ->postJson(route('favorites.storeUser', ['user' => $follower->id]))
+            ->assertBadRequest();
+    }   
 }
