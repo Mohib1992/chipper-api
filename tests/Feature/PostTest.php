@@ -4,8 +4,13 @@ namespace Tests\Feature;
 
 use Illuminate\Support\Arr;
 use App\Models\User;
+use App\Models\Post;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Tests\TestCase;
+use Illuminate\Support\Facades\Notification;
+use App\Jobs\NotifyFollowersOfNewPost;
+use App\Notifications\PostCreated;
+use Illuminate\Support\Facades\Queue;
 
 class PostTest extends TestCase
 {
@@ -124,5 +129,56 @@ class PostTest extends TestCase
         $this->assertDatabaseMissing('posts', [
             'id' => $id,
         ]);
+    }
+
+     public function test_it_sends_notifications_to_followers()
+    {
+        Notification::fake();
+
+        $author = User::factory()->create();
+        $followers = User::factory(3)->create();
+
+        foreach ($followers as $follower) {
+            $follower->favorites()->create([
+                'favoritable_id' => $author->id,
+                'favoritable_type' => User::class,
+            ]);
+        }
+
+        $post = Post::factory()->create(['user_id' => $author->id]);
+
+        $job = new NotifyFollowersOfNewPost($post);
+        $job->handle();
+
+        Notification::assertSentTo($followers, PostCreated::class);
+    }
+
+    public function test_a_user_created_post_can_notify_followers()
+    {
+        Queue::fake();
+
+        $author = User::factory()->create();
+        $followers = User::factory(5)->create();
+
+        foreach($followers as $follower) {
+            $this->actingAs($follower)
+                ->postJson(route('favorites.storeUser', ['user' => $author]))
+                ->assertCreated();
+        }
+
+        $this->actingAs($author)->postJson(route('posts.store'), [
+            'title' => 'My title',
+            'body' => 'My body.',
+        ])
+        ->assertCreated();
+
+        $this->assertDatabaseHas('posts', [
+            'title' => 'My title',
+            'body' => 'My body.',
+        ]);
+
+        Queue::assertPushed(NotifyFollowersOfNewPost::class, function ($job) {
+            return $job->post->title === 'My title';
+        });
     }
 }

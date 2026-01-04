@@ -7,6 +7,7 @@ use App\Models\Post;
 use App\Http\Requests\CreatePostRequest;
 use App\Http\Requests\UpdatePostRequest;
 use App\Http\Requests\DestroyPostRequest;
+use App\Jobs\NotifyFollowersOfNewPost;
 
 /**
  * @group Posts
@@ -31,6 +32,9 @@ class PostController extends Controller
             'body' => $request->input('body'),
             'user_id' => $user->id,
         ]);
+
+        NotifyFollowersOfNewPost::dispatch($post);
+
 
         return new PostResource($post);
     }
