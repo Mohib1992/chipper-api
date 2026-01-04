@@ -9,6 +9,24 @@ class FavoriteResource extends ResourceCollection
 {
     public function toArray(Request $request): array
     {
-        return parent::toArray($request);
+        $users = $posts = [];
+
+        foreach ($this->resource as $favorite) {
+            $favoritable = $favorite->favoritable;
+
+            if ($favoritable instanceof \App\Models\Post) {
+                $posts[] = $favoritable;
+            } elseif ($favoritable instanceof \App\Models\User) {
+                $users[] = $favoritable;
+            }
+        }
+
+        // Deduplicate users
+        $users = collect($users)->unique('id')->values();
+
+        return [
+            'posts' => PostResource::collection($posts),
+            'users' => UserResource::collection($users),
+        ];
     }
 }

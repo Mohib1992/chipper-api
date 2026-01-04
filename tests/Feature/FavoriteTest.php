@@ -6,6 +6,8 @@ use App\Models\User;
 use App\Models\Post;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Tests\TestCase;
+use App\Http\Resources\PostResource;
+use App\Http\Resources\UserResource;
 
 class FavoriteTest extends TestCase
 {
@@ -140,4 +142,47 @@ class FavoriteTest extends TestCase
             ->postJson(route('favorites.storeUser', ['user' => $follower->id]))
             ->assertBadRequest();
     }   
+
+    public function test_a_user_can_get_all_favorites_items()
+    {
+        $user = User::factory()->create();
+        $posts = Post::factory()->count(5)->create();
+        $followers = User::factory()->count(5)->create();
+
+        foreach ($followers as $follower) {
+            $this->actingAs($user)
+                ->postJson(route('favorites.storeUser', ['user' => $follower]))
+                ->assertCreated();
+        }   
+
+        foreach ($posts as $post) {
+            $this->actingAs($user)
+                ->postJson(route('favorites.store', ['post' => $post]))
+                ->assertCreated();
+        }       
+
+        $this->actingAs($user)
+            ->getJson(route('favorites.index'))
+            ->assertOk()
+            ->assertJsonCount(5, 'data.posts')
+            ->assertJsonCount(5, 'data.users')
+            ->assertJson(
+                [
+                    'data' => [
+                        'posts' => json_decode(PostResource::collection($posts)->toJson(), true),
+                        'users' => json_decode(UserResource::collection($followers)->toJson(), true)
+                    ]
+                ]
+            )
+            ->assertJsonStructure([
+                'data' => [
+                    'posts' => [
+                        '*' => ['id','title','body','user' => ['id', 'name']]
+                    ],
+                    'users' => [
+                        '*' => ['id', 'name']
+                    ]
+                ],
+            ]);
+    }
 }

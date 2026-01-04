@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use App\Http\Resources\FavoriteResource;
 use App\Http\Requests\CreateFavoriteRequest;
+use Illuminate\Support\Facades\Log;
 
 /**
  * @group Favorites
@@ -18,8 +19,16 @@ class FavoriteController extends Controller
 {
     public function index(Request $request)
     {
-        $favorites = $request->user()->favorites;
-        return FavoriteResource::collection($favorites);
+         $favorites = $request->user()
+            ->favorites()
+            ->with(['favoritable' => function ($query) {
+                $query->morphWith([
+                    Post::class => ['user'],
+                ]);
+            }])
+            ->get();
+
+        return new FavoriteResource($favorites);
     }
 
     public function store(CreateFavoriteRequest $request, Post $post)
