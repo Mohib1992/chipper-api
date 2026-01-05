@@ -33,10 +33,18 @@ class PostController extends Controller
             'user_id' => $user->id,
         ]);
 
+        if($request->hasFile('images')) {
+            foreach ($request->file('images') as $image) {
+                $post->images()->create([
+                    'url' => $image->store('images', 'public'),
+                ]);
+            }
+        }
+
         NotifyFollowersOfNewPost::dispatch($post);
 
 
-        return new PostResource($post);
+        return new PostResource($post->load('images'));
     }
 
     public function show(Post $post)

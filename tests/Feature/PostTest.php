@@ -11,6 +11,8 @@ use Illuminate\Support\Facades\Notification;
 use App\Jobs\NotifyFollowersOfNewPost;
 use App\Notifications\PostCreated;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 
 class PostTest extends TestCase
 {
@@ -180,5 +182,113 @@ class PostTest extends TestCase
         Queue::assertPushed(NotifyFollowersOfNewPost::class, function ($job) {
             return $job->post->title === 'My title';
         });
+    }
+
+    public function test_a_user_can_create_post_with_image(){
+        Storage::fake('public');
+        $user = User::factory()->create();
+        $image = UploadedFile::fake()->image('image1.jpg')->size(500);
+
+        $response = $this->actingAs($user)->postJson(route('posts.store'), [
+            'title' => 'Test Post',
+            'body' => 'This is a test post.',
+            'images' => [$image],
+        ]);
+
+        $response->assertCreated()
+            ->assertJsonStructure([
+                'data' => [
+                    'id', 'title', 'body','images'
+                ]
+            ])
+            ->assertJson([
+                'data' => [
+                    'title' => 'Test Post',
+                    'body' => 'This is a test post.',
+                    'images' => [
+                        ['url' => Storage::disk('public')->url('images/'.$image->hashName())],
+                    ],
+                ]
+            ]);
+
+        Storage::disk('public')->assertExists('images/'.$image->hashName());
+
+        $this->assertDatabaseHas('posts', [
+            'title' => 'Test Post',
+            'body' => 'This is a test post.',
+        ]);
+
+        $this->assertDatabaseHas('images', [
+            'url' => 'images/'.$image->hashName(),
+        ]); 
+    }
+
+    public function test_a_user_can_not_create_post_with_invalid_image_extension(){
+        $user = User::factory()->create();
+        $file = UploadedFile::fake()->create('document.pdf', 500);
+
+        $response = $this->actingAs($user)->postJson(route('posts.store'), [
+            'title' => 'Test Post',
+            'body' => 'This is a test post.',
+            'images' => [$file],
+        ]);
+
+        $response->assertUnprocessable();
+    }
+
+    public function test_a_user_can_see_post_with_image() {
+        $user = User::factory()->create();
+        $image = UploadedFile::fake()->image('image1.jpg')->size(500);
+
+        $response = $this->actingAs($user)->postJson(route('posts.store'), [
+            'title' => 'Test Post',
+            'body' => 'This is a test post.',
+            'images' => [$image],
+        ]);
+
+        $response->assertCreated()
+            ->assertJsonStructure([
+                'data' => [
+                    'id', 'title', 'body','images'
+                ]
+            ])
+            ->assertJson([
+                'data' => [
+                    'title' => 'Test Post',
+                    'body' => 'This is a test post.',
+                    'images' => [
+                        ['url' => Storage::disk('public')->url('images/'.$image->hashName())],
+                    ],
+                ]
+            ]);
+
+        Storage::disk('public')->assertExists('images/'.$image->hashName());
+
+        $this->assertDatabaseHas('posts', [
+            'title' => 'Test Post',
+            'body' => 'This is a test post.',
+        ]);
+
+        $this->assertDatabaseHas('images', [
+            'url' => 'images/'.$image->hashName(),
+        ]); 
+
+        $response = $this->actingAs($user)->getJson(route('posts.show', ['post' => $response->json('data.id')]));
+
+        $response->assertOk()
+            ->assertJsonStructure([
+                'data' => [
+                    'id', 'title', 'body','images'
+                ]
+            ])
+            ->assertJson([
+                'data' => [
+                    'title' => 'Test Post',
+                    'body' => 'This is a test post.',
+                    'images' => [
+                        ['url' => Storage::disk('public')->url('images/'.$image->hashName())],
+                    ],
+                ]
+            ]);
     }
 }
